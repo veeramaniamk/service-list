@@ -1,12 +1,195 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Hello World!</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Services Manager</title>
+    <link rel="stylesheet" href="/src/index.css" />
   </head>
   <body>
-    <h1>💖 Hello World!</h1>
-    <p>Welcome to your Electron application.</p>
+    <div id="app">
+      <!-- Top Application Header -->
+      <header class="app-header">
+        <div class="brand">
+          <div class="brand-icon">
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+              <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+              <line x1="6" y1="6" x2="6.01" y2="6"></line>
+              <line x1="6" y1="18" x2="6.01" y2="18"></line>
+            </svg>
+          </div>
+          <div>
+            <h1>Services Manager</h1>
+            <p class="subtitle">Linux Systemd Services Controller</p>
+          </div>
+        </div>
+
+        <div class="header-right">
+          <!-- System Scope Selector -->
+          <div class="scope-tabs" role="tablist">
+            <button
+              id="tab-system"
+              class="scope-tab active"
+              data-scope="system"
+            >
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                <line x1="8" y1="21" x2="16" y2="21"></line>
+                <line x1="12" y1="17" x2="12" y2="21"></line>
+              </svg>
+              System Services
+            </button>
+            <button id="tab-user" class="scope-tab" data-scope="user">
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
+              User Services
+            </button>
+          </div>
+
+          <!-- Environment Privilege Pill -->
+          <div id="env-badge" class="env-badge">
+            <span class="badge-dot"></span>
+            <span id="env-badge-text">Detecting...</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Notification Toast Container -->
+      <div id="toast" class="toast hidden">
+        <div class="toast-content">
+          <span id="toast-icon" class="toast-icon"></span>
+          <span id="toast-message" class="toast-message"></span>
+        </div>
+        <button id="toast-close" class="toast-close" aria-label="Close">
+          ✕
+        </button>
+      </div>
+
+      <!-- Controls & Filter Bar -->
+      <section class="toolbar">
+        <div class="search-box">
+          <svg
+            class="search-icon"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input
+            type="text"
+            id="search-input"
+            placeholder="Search service by name, description, or location..."
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <button
+            id="search-clear"
+            class="search-clear hidden"
+            title="Clear search"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div class="filter-group">
+          <button class="filter-btn active" data-filter="running">
+            <span class="status-indicator running"></span>
+            Running
+            <span id="count-running" class="count-pill">0</span>
+          </button>
+          <button class="filter-btn" data-filter="stopped">
+            <span class="status-indicator stopped"></span>
+            Stopped
+            <span id="count-stopped" class="count-pill">0</span>
+          </button>
+          <button class="filter-btn" data-filter="all">
+            All
+            <span id="count-all" class="count-pill">0</span>
+          </button>
+        </div>
+
+        <div class="toolbar-actions">
+          <label
+            class="auto-refresh-toggle"
+            title="Automatically refresh services every 5 seconds"
+          >
+            <input type="checkbox" id="auto-refresh-check" />
+            <span class="slider"></span>
+            <span class="toggle-label">Auto-refresh</span>
+          </label>
+          <button
+            id="btn-refresh"
+            class="btn btn-secondary"
+            title="Refresh service list"
+          >
+            <svg
+              id="refresh-icon"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"
+              />
+            </svg>
+            Refresh
+          </button>
+        </div>
+      </section>
+
+      <!-- Status / Summary Bar -->
+      <div class="status-bar">
+        <div class="status-summary">
+          <span id="summary-text">Loading services...</span>
+        </div>
+        <div class="status-tip">
+          <span
+            >💡 Tip: Stopping or running system services prompts for
+            administrator authorization (Polkit).</span
+          >
+        </div>
+      </div>
+
+      <!-- Main Services Content Area -->
+      <main id="services-container" class="services-container">
+        <!-- Rendered dynamically via renderer.ts -->
+      </main>
+    </div>
+
     <script type="module" src="/src/renderer.ts"></script>
   </body>
 </html>
