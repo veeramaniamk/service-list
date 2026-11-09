@@ -7,6 +7,8 @@ A modern, fast, and secure desktop application built with **Electron**, **Vite**
 ## 🚀 Features
 
 - **Running Services List**: Instantly lists all currently running services with status badges, human-readable descriptions, and execution states.
+- **RAM Consumption Metrics**: Displays real-time resident memory consumption (e.g., `12.5 MB`, `748 KB`) for every service, plus aggregate RAM usage across all running services in the summary bar.
+- **Process & Thread Tracking**: Tracks each service's Main PID (Process ID) and the number of active worker tasks and threads.
 - **Service Name & File Location**: Displays both the **systemd unit file location** (e.g., `/usr/lib/systemd/system/cron.service`) and the **executable binary path** (e.g., `/usr/sbin/cron`) with one-click copy to clipboard.
 - **Stop, Run & Restart Controls**:
   - **Stop**: Safely halts running background services.
@@ -16,7 +18,7 @@ A modern, fast, and secure desktop application built with **Electron**, **Vite**
   - **System Services** (`systemctl`): Manages system-wide daemons (Apache, MySQL, Bluetooth, Cron, etc.).
   - **User Services** (`systemctl --user`): Manages user-session services (PipeWire, GNOME services, D-Bus, etc.) without requiring root permissions.
 - **Real-Time Search & State Filtering**:
-  - Instant live search by service name, description, unit file path, or binary path.
+  - Instant live search by service name, description, unit file path, binary path, or PID.
   - Quick filter buttons for **Running**, **Stopped**, and **All** services.
 - **Auto-Refresh**: Optional automated background refresh (every 5 seconds) to track service state changes in real time.
 - **Native Privilege Escalation**: Integrates with Linux PolicyKit (`pkexec`) to display graphical authentication prompts when managing system services as a standard user.
@@ -67,34 +69,37 @@ _(The `-E` flag preserves your display environment variables so Electron can con
 
 ## ⚙️ How to Manage Services
 
-### 1. Viewing Running Services
+### 1. Viewing Services, RAM & Process Information
 
-- When launched, the application defaults to displaying all **Running** system services.
-- Each service card contains:
+- When launched, the application displays all active **Running** system services.
+- Each service card presents:
   - **Service Name**: The systemd identifier (e.g., `apache2.service`, `cron.service`).
   - **Status Badge**: Indicates whether the service is `Running`, `Stopped`, `Exited`, or `Failed`.
+  - **RAM Consumed**: Real-time memory consumption (e.g., `12.5 MB`, `5.3 MB`) queried via systemd `MemoryCurrent` and `/proc/<pid>/status` RSS.
+  - **Process (PID & Tasks)**: The main Process ID (`PID`) and number of active cgroup worker tasks/threads.
   - **Description**: Summary of what the service does.
-  - **Location**: The absolute filesystem path to the `.service` unit file on disk.
+  - **Location**: Absolute filesystem path to the `.service` unit file on disk.
   - **Binary**: The path to the executable binary launched by systemd (when available).
+  - **Summary Bar**: Displays total services shown, aggregate RAM consumed, and active process count.
 
 ### 2. Stopping a Running Service
 
-1. Locate the running service in the list (or use the search bar).
+1. Locate the running service in the list (or search by name, PID, or path).
 2. Click the red **Stop** button.
 3. If managing a system service and running as a normal user, enter your password in the Polkit modal when prompted.
-4. The service will stop, and a confirmation toast notification will appear.
+4. The service will stop, its PID/RAM metrics reset, and a confirmation toast notification will appear.
 
 ### 3. Running (Starting) a Service
 
 1. Click the **Stopped** or **All** filter tab in the toolbar.
 2. Locate the stopped service you wish to run.
 3. Click the green **Run** button.
-4. Once systemd activates the service, the badge updates to **Running**, and the service appears in the running list.
+4. Once systemd activates the service, the badge updates to **Running**, its new PID and RAM consumption are dynamically loaded, and the service appears in the running list.
 
 ### 4. Restarting a Service
 
 1. For any active service, click the **Restart** button.
-2. Systemd will reload or restart the service daemon cleanly.
+2. Systemd will reload or restart the service daemon cleanly and refresh the PID and memory stats.
 
 ### 5. Managing User Services vs System Services
 
@@ -107,8 +112,8 @@ _(The `-E` flag preserves your display environment variables so Electron can con
 
 ### 7. Searching and Auto-Refresh
 
-- **Search**: Type any text in the search input to instantly filter by service name, description, or filesystem path.
-- **Auto-Refresh**: Toggle the "Auto-refresh" switch in the toolbar to automatically poll and update the status of services every 5 seconds.
+- **Search**: Type any text in the search input to instantly filter by service name, description, filesystem path, or PID.
+- **Auto-Refresh**: Toggle the "Auto-refresh" switch in the toolbar to automatically poll and update the status, RAM consumption, and process metrics every 5 seconds.
 
 ---
 

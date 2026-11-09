@@ -10,6 +10,10 @@ export interface ServiceItem {
   fragmentPath: string;
   execStart?: string;
   scope: ServiceScope;
+  mainPid?: number;
+  memoryBytes?: number;
+  memoryFormatted?: string;
+  tasksCount?: number;
 }
 
 export interface ActionResult {

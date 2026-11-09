@@ -33,6 +33,39 @@ export function getSystemInfo(): SystemInfo {
   };
 }
 
+/**
+ * Formats bytes into human-readable string (KB, MB, GB)
+ */
+export function formatBytes(bytes?: number): string {
+  if (bytes === undefined || bytes === null || isNaN(bytes) || bytes <= 0) {
+    return '0 B';
+  }
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let size = bytes;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex++;
+  }
+  return `${size.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+/**
+ * Fallback to read resident set size (VmRSS) from /proc/<pid>/status
+ */
+function getProcessRssBytes(pid: number): number | undefined {
+  try {
+    const status = fs.readFileSync(`/proc/${pid}/status`, 'utf8');
+    const match = status.match(/VmRSS:\s+(\d+)\s+kB/i);
+    if (match) {
+      return parseInt(match[1], 10) * 1024;
+    }
+  } catch {
+    // Process may have exited or permissions restricted
+  }
+  return undefined;
+}
+
 interface RawSystemdUnit {
   unit: string;
   load: string;
@@ -41,13 +74,19 @@ interface RawSystemdUnit {
   description: string;
 }
 
+interface ParsedServiceDetails {
+  fragmentPath?: string;
+  execStart?: string;
+  mainPid?: number;
+  memoryBytes?: number;
+  tasksCount?: number;
+}
+
 /**
  * Parses key-value output from `systemctl show`
  */
-function parseSystemctlShow(
-  output: string,
-): Map<string, { fragmentPath?: string; execStart?: string }> {
-  const map = new Map<string, { fragmentPath?: string; execStart?: string }>();
+function parseSystemctlShow(output: string): Map<string, ParsedServiceDetails> {
+  const map = new Map<string, ParsedServiceDetails>();
   const blocks = output.split('\n\n');
 
   for (const block of blocks) {
@@ -56,6 +95,9 @@ function parseSystemctlShow(
     let id = '';
     let fragmentPath = '';
     let execStart = '';
+    let mainPid: number | undefined;
+    let memoryBytes: number | undefined;
+    let tasksCount: number | undefined;
 
     for (const line of lines) {
       const idx = line.indexOf('=');
@@ -69,20 +111,42 @@ function parseSystemctlShow(
         fragmentPath = value;
       } else if (key === 'ExecStart') {
         execStart = value;
+      } else if (key === 'MainPID') {
+        const parsedPid = parseInt(value, 10);
+        if (!isNaN(parsedPid) && parsedPid > 0) {
+          mainPid = parsedPid;
+        }
+      } else if (key === 'MemoryCurrent') {
+        const parsedMem = parseInt(value, 10);
+        if (!isNaN(parsedMem) && parsedMem > 0) {
+          memoryBytes = parsedMem;
+        }
+      } else if (key === 'TasksCurrent') {
+        const parsedTasks = parseInt(value, 10);
+        if (!isNaN(parsedTasks) && parsedTasks >= 0) {
+          tasksCount = parsedTasks;
+        }
       }
     }
 
     if (id) {
-      // Extract binary executable path from ExecStart if present: { path=/usr/bin/... ; ... }
       let binaryPath: string | undefined;
       const match = execStart.match(/path=([^ ;]+)/);
       if (match) {
         binaryPath = match[1];
       }
 
+      // If MemoryCurrent was not available from systemd, attempt /proc RSS lookup
+      if (memoryBytes === undefined && mainPid && mainPid > 0) {
+        memoryBytes = getProcessRssBytes(mainPid);
+      }
+
       map.set(id, {
         fragmentPath: fragmentPath || undefined,
         execStart: binaryPath,
+        mainPid,
+        memoryBytes,
+        tasksCount,
       });
     }
   }
@@ -103,7 +167,6 @@ function parseTextListUnits(output: string): RawSystemdUnit[] {
       continue;
     }
 
-    // Typical format: [unit] [load] [active] [sub] [description...]
     const parts = trimmed.split(/\s+/);
     if (parts.length >= 4 && parts[0].includes('.service')) {
       const unit = parts[0].replace(/^●\s*/, '');
@@ -177,19 +240,22 @@ export async function getServices(
     return [];
   }
 
-  // Batch query service details (FragmentPath, ExecStart)
+  // Batch query service details (FragmentPath, ExecStart, MainPID, MemoryCurrent, TasksCurrent)
   const chunkSize = 50;
-  const detailsMap = new Map<
-    string,
-    { fragmentPath?: string; execStart?: string }
-  >();
+  const detailsMap = new Map<string, ParsedServiceDetails>();
 
   for (let i = 0; i < serviceUnits.length; i += chunkSize) {
     const chunk = serviceUnits.slice(i, i + chunkSize).map((u) => u.unit);
     try {
       const { stdout } = await execFileAsync(
         'systemctl',
-        [...scopeArgs, 'show', ...chunk, '-p', 'Id,FragmentPath,ExecStart'],
+        [
+          ...scopeArgs,
+          'show',
+          ...chunk,
+          '-p',
+          'Id,FragmentPath,ExecStart,MainPID,MemoryCurrent,TasksCurrent',
+        ],
         { timeout: 15000 },
       );
       const chunkMap = parseSystemctlShow(stdout);
@@ -203,6 +269,7 @@ export async function getServices(
 
   const items: ServiceItem[] = serviceUnits.map((u) => {
     const details = detailsMap.get(u.unit);
+    const memoryBytes = details?.memoryBytes;
     return {
       name: u.unit,
       description: u.description || '',
@@ -212,6 +279,11 @@ export async function getServices(
       fragmentPath: details?.fragmentPath || 'Generated / Dynamic',
       execStart: details?.execStart,
       scope,
+      mainPid: details?.mainPid,
+      memoryBytes,
+      memoryFormatted:
+        memoryBytes !== undefined ? formatBytes(memoryBytes) : undefined,
+      tasksCount: details?.tasksCount,
     };
   });
 

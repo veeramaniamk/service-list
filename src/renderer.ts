@@ -58,6 +58,23 @@ const toastIcon = document.getElementById('toast-icon') as HTMLSpanElement;
 const toastClose = document.getElementById('toast-close') as HTMLButtonElement;
 
 /**
+ * Format raw byte count into human-readable memory string
+ */
+function formatBytes(bytes?: number): string {
+  if (bytes === undefined || bytes === null || isNaN(bytes) || bytes <= 0) {
+    return '0 B';
+  }
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let size = bytes;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex++;
+  }
+  return `${size.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+/**
  * Display a feedback toast notification
  */
 function showToast(
@@ -180,19 +197,29 @@ function renderServices(): void {
       s.name.toLowerCase().includes(query) ||
       s.description.toLowerCase().includes(query) ||
       s.fragmentPath.toLowerCase().includes(query) ||
-      (s.execStart && s.execStart.toLowerCase().includes(query))
+      (s.execStart && s.execStart.toLowerCase().includes(query)) ||
+      (s.mainPid && String(s.mainPid).includes(query))
     );
   });
 
-  // Update summary count
-  summaryText.textContent = `Showing ${filtered.length} of ${servicesList.length} services (${currentScope} scope)`;
+  // Calculate aggregate RAM usage and active processes
+  const totalMemoryBytes = filtered.reduce(
+    (acc, s) => acc + (s.memoryBytes || 0),
+    0,
+  );
+  const activeProcessesCount = filtered.filter(
+    (s) => s.mainPid && s.mainPid > 0,
+  ).length;
+
+  // Update summary header
+  summaryText.innerHTML = `Showing <strong>${filtered.length}</strong> of ${servicesList.length} services (${currentScope} scope) &bull; RAM Consumed: <strong style="color:#7dd3fc">${formatBytes(totalMemoryBytes)}</strong> &bull; Active Processes: <strong style="color:#d8b4fe">${activeProcessesCount}</strong>`;
 
   if (isLoading && servicesList.length === 0) {
     servicesContainer.innerHTML = `
       <div class="state-box">
         <div class="spinner"></div>
         <h3>Loading services...</h3>
-        <p>Querying systemctl for active services and file locations.</p>
+        <p>Querying systemctl for active services, RAM consumption, and process metrics.</p>
       </div>
     `;
     return;
@@ -263,6 +290,41 @@ function renderServices(): void {
               <span class="badge-dot"></span>
               ${badgeText}
             </span>
+
+            <!-- RAM Usage Badge -->
+            ${
+              isRunning && s.memoryFormatted
+                ? `
+              <span class="service-stat memory" title="Current Resident RAM Consumed">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M6 19v2"/><path d="M10 19v2"/><path d="M14 19v2"/><path d="M18 19v2"/>
+                  <rect x="4" y="4" width="16" height="15" rx="2"/>
+                  <line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="16" y2="13"/>
+                </svg>
+                ${escapeHtml(s.memoryFormatted)}
+              </span>
+            `
+                : ''
+            }
+
+            <!-- Process / PID Badge -->
+            ${
+              isRunning && s.mainPid
+                ? `
+              <span class="service-stat pid" title="Main Process ID and Task/Thread Count">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="4" y="4" width="16" height="16" rx="2"/>
+                  <rect x="9" y="9" width="6" height="6"/>
+                  <line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/>
+                  <line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/>
+                  <line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/>
+                  <line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/>
+                </svg>
+                PID: ${s.mainPid}${s.tasksCount && s.tasksCount > 1 ? ` (${s.tasksCount} tasks)` : ''}
+              </span>
+            `
+                : ''
+            }
           </div>
 
           <div class="card-actions">
@@ -318,6 +380,26 @@ function renderServices(): void {
         }
 
         <div class="card-meta">
+          <!-- RAM Usage Pill -->
+          <div class="meta-pill highlight-ram" title="RAM Consumed by Service">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M6 19v2"/><path d="M10 19v2"/><path d="M14 19v2"/><path d="M18 19v2"/>
+              <rect x="4" y="4" width="16" height="15" rx="2"/>
+            </svg>
+            <strong>RAM:</strong>
+            <code>${escapeHtml(s.memoryFormatted || (isRunning ? '< 1 MB' : '0 B'))}</code>
+          </div>
+
+          <!-- Process / Task Pill -->
+          <div class="meta-pill highlight-proc" title="Main PID and Task/Thread Information">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="4" y="4" width="16" height="16" rx="2"/>
+              <rect x="9" y="9" width="6" height="6"/>
+            </svg>
+            <strong>Process:</strong>
+            <code>${s.mainPid ? `PID ${s.mainPid}` : 'None'}${s.tasksCount !== undefined && s.tasksCount > 0 ? ` (${s.tasksCount} task${s.tasksCount === 1 ? '' : 's'})` : ''}</code>
+          </div>
+
           <!-- Unit File Location -->
           <div class="meta-pill" title="Systemd Unit File Location">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
